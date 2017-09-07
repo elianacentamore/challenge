@@ -16,9 +16,11 @@ use Image;
 class PostController extends Controller
 {
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->middleware('auth');
     }
+
     /**
      * Display a listing of the resource.
      *
@@ -27,6 +29,7 @@ class PostController extends Controller
     public function index()
     {
         $posts = Post::orderBy('id', 'desc')->paginate(10);
+
         return view('posts.index')->withPosts($posts);
     }
 
@@ -39,24 +42,27 @@ class PostController extends Controller
     {
         $categories = Category::all();
         $tags = Tag::all();
-        return view('posts.create')->withCategories($categories)->withTags($tags);
+        return view('posts.create')
+            ->withCategories($categories)
+            ->withTags($tags);
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  \Illuminate\Http\Request $request
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request)
     {
         // validate the data
         $this->validate($request, array(
-                'title'         => 'required|max:255',
-                'slug'          => 'required|alpha_dash|min:5|max:255|unique:posts,slug',
-                'category_id'   => 'required|integer',
-                'body'          => 'required'
-            ));
+            'title' => 'required|max:255',
+            'slug' => 'required|alpha_dash|min:5|max:255|unique:posts,slug',
+            'category_id' => 'required|integer',
+            'body' => 'required',
+            'image' => 'required'
+        ));
 
         // store in the database
         $post = new Post;
@@ -67,17 +73,37 @@ class PostController extends Controller
         $post->body = Purifier::clean($request->body);
 
         if ($request->hasFile('featured_img')) {
-          $image = $request->file('featured_img');
-          $filename = time() . '.' . $image->getClientOriginalExtension();
-          $location = public_path('images/' . $filename);
-          Image::make($image)->resize(800, 400)->save($location);
+            $image = $request->file('featured_img');
+            $filename = time() . '.' . $image->getClientOriginalExtension();
+            $location = public_path('images/' . $filename);
+            Image::make($image)->resize(800, 400)->save($location);
 
-          $post->image = $filename;
+            $post->image = $filename;
         }
+
+        //store image
+        $fileImage = $request->file('image');
+        $filename = $fileImage->getClientOriginalExtension();
+        $pathImage = storage_path(date('y') . '/' . date('m') . '/' . $filename);
+        if (!file_exists($pathImage)) {
+            mkdir($pathImage);
+        }
+        Image::make($fileImage)->save($pathImage);
+
 
         $post->save();
 
-        if ( $request->has('tags') && is_array($request->tags) )
+        //Send email
+        //it would be an Event
+        $user = User::where('email', '=', Auth::user()->email)->pluck('email');
+        Mail::send('emails', function ($m) use ($user) {
+            $m->from('challenge@test.com', 'Challenge');
+
+            $m->to($user->email, $user->name)->subject('There is a new post! See it!');
+        });
+
+
+        if ($request->has('tags') && is_array($request->tags))
             $post->tags()->sync($request->tags, false);
 
         Session::flash('success', 'The blog post was successfully save!');
@@ -88,7 +114,7 @@ class PostController extends Controller
     /**
      * Display the specified resource.
      *
-     * @param  int  $id
+     * @param  int $id
      * @return \Illuminate\Http\Response
      */
     public function show($id)
@@ -100,7 +126,7 @@ class PostController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
+     * @param  int $id
      * @return \Illuminate\Http\Response
      */
     public function edit($id)
@@ -125,8 +151,8 @@ class PostController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param  \Illuminate\Http\Request $request
+     * @param  int $id
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request, $id)
@@ -138,14 +164,14 @@ class PostController extends Controller
             $this->validate($request, array(
                 'title' => 'required|max:255',
                 'category_id' => 'required|integer',
-                'body'  => 'required'
+                'body' => 'required'
             ));
         } else {
-        $this->validate($request, array(
+            $this->validate($request, array(
                 'title' => 'required|max:255',
-                'slug'  => 'required|alpha_dash|min:5|max:255|unique:posts,slug',
+                'slug' => 'required|alpha_dash|min:5|max:255|unique:posts,slug',
                 'category_id' => 'required|integer',
-                'body'  => 'required'
+                'body' => 'required'
             ));
         }
 
@@ -176,7 +202,7 @@ class PostController extends Controller
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int  $id
+     * @param  int $id
      * @return \Illuminate\Http\Response
      */
     public function destroy($id)
